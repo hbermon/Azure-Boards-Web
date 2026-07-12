@@ -8,11 +8,13 @@ const selectedWorkItemMeta = document.getElementById('selectedWorkItemMeta');
 const detailSprint = document.getElementById('detailSprint');
 const detailAssigned = document.getElementById('detailAssigned');
 const detailCell = document.getElementById('detailCell');
+const filterTextInput = document.getElementById('filterTextInput');
 const filterSprintSelect = document.getElementById('filterSprintSelect');
 const filterAssignedSelect = document.getElementById('filterAssignedSelect');
 const filterCellSelect = document.getElementById('filterCellSelect');
 const btnClearFilters = document.getElementById('btnClearFilters');
 const legendCounters = [0, 1, 2, 3, 4].map((depth) => document.getElementById(`legendCount${depth}`));
+const legendButtons = Array.from(document.querySelectorAll('.legend-entry[data-depth]'));
 
 const LEVEL_NAMES = ['Proyecto', 'Epica', 'Feature', 'Tarea', 'Subtarea'];
 
@@ -20,7 +22,9 @@ let knownRoots = [];
 let originalTree = [];
 let selectedNodeId = null;
 let selectedNodeData = null;
+let collapsedNodeIds = new Set();
 let activeFilters = {
+  text: null,
   sprint: null,
   assignedTo: null,
   cell: null
@@ -156,14 +160,17 @@ function findNodeById(tree, id) {
 }
 
 function nodeMatchesActiveFilters(node) {
+  const query = normalizeText(activeFilters.text);
+  const searchable = `${node.id} ${node.title}`;
+  const textMatch = !query || normalizeText(searchable).includes(query);
   const sprintMatch = !activeFilters.sprint || normalizeText(getNodeSprint(node)).includes(normalizeText(activeFilters.sprint));
   const assignedMatch = !activeFilters.assignedTo || normalizeText(getNodeAssigned(node)) === normalizeText(activeFilters.assignedTo);
   const cellMatch = !activeFilters.cell || normalizeText(getNodeCell(node)) === normalizeText(activeFilters.cell);
-  return sprintMatch && assignedMatch && cellMatch;
+  return textMatch && sprintMatch && assignedMatch && cellMatch;
 }
 
 function hasActiveFilters() {
-  return Boolean(activeFilters.sprint || activeFilters.assignedTo || activeFilters.cell);
+  return Boolean(activeFilters.text || activeFilters.sprint || activeFilters.assignedTo || activeFilters.cell);
 }
 
 function updateLegendCounters() {
@@ -204,12 +211,33 @@ function filterTreeKeepingParents(nodes) {
     .filter(Boolean);
 }
 
+function initializeCollapsedFromFeature(tree) {
+  const allNodes = flattenNodes(tree, []);
+  collapsedNodeIds = new Set(
+    allNodes
+      .filter((node) => Number(node.depth) >= 2 && Array.isArray(node.children) && node.children.length > 0)
+      .map((node) => node.id)
+  );
+}
+
+function collapseTreeUpToLevel(depthLimit) {
+  const numericDepthLimit = Number(depthLimit);
+  const allNodes = flattenNodes(originalTree, []);
+  collapsedNodeIds = new Set(
+    allNodes
+      .filter((node) => Number(node.depth) >= numericDepthLimit && Array.isArray(node.children) && node.children.length > 0)
+      .map((node) => node.id)
+  );
+  applyActiveFiltersAndRender();
+}
+
 function applyActiveFiltersAndRender() {
   const filteredTree = filterTreeKeepingParents(originalTree);
   renderTree(filteredTree);
   updateLegendCounters();
 
   const activeSummary = [
+    activeFilters.text ? `Texto: ${activeFilters.text}` : null,
     activeFilters.sprint ? `Sprint: ${activeFilters.sprint}` : null,
     activeFilters.assignedTo ? `Asignado: ${activeFilters.assignedTo}` : null,
     activeFilters.cell ? `Celula: ${activeFilters.cell}` : null
@@ -259,6 +287,7 @@ function createNodeElement(node) {
   const li = fragment.querySelector('.tree-node');
   const pill = fragment.querySelector('.node-pill');
   const childList = fragment.querySelector('.children');
+  const hasChildren = Array.isArray(node.children) && node.children.length > 0;
 
   const level = document.createElement('span');
   level.className = 'node-level';
@@ -267,6 +296,10 @@ function createNodeElement(node) {
   const title = document.createElement('span');
   title.className = 'node-title';
   title.textContent = `${node.id} - ${node.title}`;
+
+  const assigned = document.createElement('span');
+  assigned.className = 'node-assigned';
+  assigned.textContent = `(${getNodeAssigned(node) || 'Sin asignar'})`;
 
   const meta = document.createElement('span');
   meta.className = 'node-meta';
@@ -278,6 +311,30 @@ function createNodeElement(node) {
 
   const icon = document.createElement('span');
   icon.className = 'node-icon';
+
+  const toggle = document.createElement('button');
+  toggle.type = 'button';
+  toggle.className = 'node-toggle';
+
+  if (hasChildren) {
+    const isCollapsed = collapsedNodeIds.has(node.id);
+    toggle.textContent = isCollapsed ? '▸' : '▾';
+    toggle.setAttribute('aria-label', isCollapsed ? 'Expandir nodo' : 'Colapsar nodo');
+    toggle.addEventListener('click', (event) => {
+      event.stopPropagation();
+      if (collapsedNodeIds.has(node.id)) {
+        collapsedNodeIds.delete(node.id);
+      } else {
+        collapsedNodeIds.add(node.id);
+      }
+      applyActiveFiltersAndRender();
+    });
+  } else {
+    toggle.textContent = '·';
+    toggle.classList.add('is-empty');
+    toggle.setAttribute('aria-hidden', 'true');
+    toggle.disabled = true;
+  }
 
   const depthClass = `node-depth-${Math.min(node.depth, 4)}`;
   pill.classList.add(depthClass);
@@ -293,12 +350,14 @@ function createNodeElement(node) {
     applyActiveFiltersAndRender();
   });
 
+  pill.appendChild(toggle);
   pill.appendChild(icon);
   pill.appendChild(level);
   pill.appendChild(title);
+  pill.appendChild(assigned);
   pill.appendChild(meta);
 
-  if (node.children.length === 0) {
+  if (!hasChildren || collapsedNodeIds.has(node.id)) {
     childList.remove();
   } else {
     node.children.forEach((child) => {
@@ -360,6 +419,7 @@ async function loadHierarchy() {
   }
 
   originalTree = payload.tree || [];
+  initializeCollapsedFromFeature(originalTree);
   populateFilterSelects(originalTree);
 
   if (selectedNodeId) {
@@ -368,10 +428,16 @@ async function loadHierarchy() {
 
   applyActiveFiltersAndRender();
 
-  if (!activeFilters.sprint && !activeFilters.assignedTo && !activeFilters.cell) {
+  if (!activeFilters.text && !activeFilters.sprint && !activeFilters.assignedTo && !activeFilters.cell) {
     setStatus(`Mostrando ${selected.length} proyecto(s) en backlog ${payload.backlogName || '(sin nombre)'}`);
   }
 }
+
+filterTextInput.addEventListener('input', () => {
+  const value = filterTextInput.value.trim();
+  activeFilters.text = value || null;
+  applyActiveFiltersAndRender();
+});
 
 filterSprintSelect.addEventListener('change', () => {
   activeFilters.sprint = filterSprintSelect.value || null;
@@ -390,15 +456,24 @@ filterCellSelect.addEventListener('change', () => {
 
 btnClearFilters.addEventListener('click', () => {
   activeFilters = {
+    text: null,
     sprint: null,
     assignedTo: null,
     cell: null
   };
+  filterTextInput.value = '';
   filterSprintSelect.value = '';
   filterAssignedSelect.value = '';
   filterCellSelect.value = '';
   applyActiveFiltersAndRender();
   setStatus('Filtros limpiados.');
+});
+
+legendButtons.forEach((button) => {
+  button.addEventListener('click', () => {
+    const depth = button.dataset.depth;
+    collapseTreeUpToLevel(depth);
+  });
 });
 
 controlsForm.addEventListener('submit', async (event) => {

@@ -39,6 +39,16 @@
         <section class="panel details-panel">
           <h2>Detalle del Work Item</h2>
 
+          <div class="detail-search-wrap">
+            <label for="filterTextInput" class="detail-label">Filtro por ID o titulo</label>
+            <input
+              id="filterTextInput"
+              class="detail-search-input"
+              type="text"
+              placeholder="Buscar por ID o titulo..."
+            />
+          </div>
+
           <div class="detail-card">
             <p class="detail-title" id="selectedWorkItemTitle">Selecciona un work item del arbol</p>
             <p class="detail-subtitle" id="selectedWorkItemMeta">Sin seleccion</p>
@@ -79,26 +89,26 @@
             <p id="statusText">Cargando...</p>
           </div>
           <div class="tree-legend" id="treeLegend">
-            <div class="legend-entry legend-depth-0">
+            <button class="legend-entry legend-depth-0" type="button" data-depth="0" aria-label="Contraer hasta Proyecto">
               <span class="legend-label">Proyecto</span>
               <span class="legend-count" id="legendCount0">0</span>
-            </div>
-            <div class="legend-entry legend-depth-1">
+            </button>
+            <button class="legend-entry legend-depth-1" type="button" data-depth="1" aria-label="Contraer hasta Epica">
               <span class="legend-label">Epica</span>
               <span class="legend-count" id="legendCount1">0</span>
-            </div>
-            <div class="legend-entry legend-depth-2">
+            </button>
+            <button class="legend-entry legend-depth-2" type="button" data-depth="2" aria-label="Contraer hasta Feature">
               <span class="legend-label">Feature</span>
               <span class="legend-count" id="legendCount2">0</span>
-            </div>
-            <div class="legend-entry legend-depth-3">
+            </button>
+            <button class="legend-entry legend-depth-3" type="button" data-depth="3" aria-label="Contraer hasta Tarea">
               <span class="legend-label">Tarea</span>
               <span class="legend-count" id="legendCount3">0</span>
-            </div>
-            <div class="legend-entry legend-depth-4">
+            </button>
+            <button class="legend-entry legend-depth-4" type="button" data-depth="4" aria-label="Contraer hasta Subtarea">
               <span class="legend-label">Subtarea</span>
               <span class="legend-count" id="legendCount4">0</span>
-            </div>
+            </button>
           </div>
           <div id="treeContainer" class="tree-container"></div>
         </section>
