@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Azure Boards Web</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Space+Grotesk:wght@500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="top-panel">
+        <div class="title-wrap">
+          <p class="eyebrow">Azure Boards</p>
+          <h1>Backlog Jerarquico</h1>
+        </div>
+
+        <form id="controls" class="controls" autocomplete="off">
+          <label class="field-group">
+            <span>Nombre del backlog</span>
+            <input id="backlogName" type="text" placeholder="do-arquit_gobierno-transformacion_y_modernizacion_arquitectura" />
+          </label>
+
+          <fieldset class="field-group projects-group">
+            <legend>Proyectos a visualizar</legend>
+            <div id="projectSelector" class="project-selector"></div>
+          </fieldset>
+
+          <button type="submit" class="btn-primary">Cargar backlog</button>
+        </form>
+      </header>
+
+      <main class="bottom-panels">
+        <section class="panel details-panel">
+          <h2>Detalle del Work Item</h2>
+
+          <div class="detail-card">
+            <p class="detail-title" id="selectedWorkItemTitle">Selecciona un work item del arbol</p>
+            <p class="detail-subtitle" id="selectedWorkItemMeta">Sin seleccion</p>
+          </div>
+
+          <div class="detail-fields">
+            <div class="detail-field">
+              <p class="detail-label">Sprint</p>
+              <p class="detail-value" id="detailSprint">-</p>
+              <select id="filterSprintSelect" class="filter-select">
+                <option value="">Todos los sprints</option>
+              </select>
+            </div>
+
+            <div class="detail-field">
+              <p class="detail-label">Asignado</p>
+              <p class="detail-value" id="detailAssigned">-</p>
+              <select id="filterAssignedSelect" class="filter-select">
+                <option value="">Todos los asignados</option>
+              </select>
+            </div>
+
+            <div class="detail-field">
+              <p class="detail-label">Celula ([ARQ])</p>
+              <p class="detail-value" id="detailCell">-</p>
+              <select id="filterCellSelect" class="filter-select">
+                <option value="">Todas las celulas</option>
+              </select>
+            </div>
+          </div>
+
+          <button id="btnClearFilters" class="btn-ghost" type="button">Limpiar filtros</button>
+        </section>
+
+        <section class="panel tree-panel">
+          <div class="tree-head">
+            <h2>Jerarquia</h2>
+            <p id="statusText">Cargando...</p>
+          </div>
+          <div class="tree-legend" id="treeLegend">
+            <div class="legend-entry legend-depth-0">
+              <span class="legend-label">Proyecto</span>
+              <span class="legend-count" id="legendCount0">0</span>
+            </div>
+            <div class="legend-entry legend-depth-1">
+              <span class="legend-label">Epica</span>
+              <span class="legend-count" id="legendCount1">0</span>
+            </div>
+            <div class="legend-entry legend-depth-2">
+              <span class="legend-label">Feature</span>
+              <span class="legend-count" id="legendCount2">0</span>
+            </div>
+            <div class="legend-entry legend-depth-3">
+              <span class="legend-label">Tarea</span>
+              <span class="legend-count" id="legendCount3">0</span>
+            </div>
+            <div class="legend-entry legend-depth-4">
+              <span class="legend-label">Subtarea</span>
+              <span class="legend-count" id="legendCount4">0</span>
+            </div>
+          </div>
+          <div id="treeContainer" class="tree-container"></div>
+        </section>
+      </main>
+    </div>
+
+    <template id="treeNodeTemplate">
+      <li class="tree-node">
+        <div class="node-pill"></div>
+        <ul class="children"></ul>
+      </li>
+    </template>
+
+    <script src="app.js"></script>
+  </body>
+</html>
