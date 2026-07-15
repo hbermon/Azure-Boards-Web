@@ -72,6 +72,62 @@ function extractSprint(iterationPath) {
   return parts[parts.length - 1] || value;
 }
 
+function normalizeTag(value) {
+  return String(value || '').replace(/\\/g, '').trim();
+}
+
+function parseSprintNumber(value) {
+  const match = String(value || '').match(/(\d+)/);
+  return match ? Number(match[1]) : null;
+}
+
+function computeSprintContext(baseContext, requestedSprint) {
+  const baseYear = Number(baseContext?.year) || new Date().getFullYear();
+  const baseQuarter = Number(baseContext?.quarter) || 1;
+  const baseSprint = Number(baseContext?.sprint) || 1;
+  const targetSprint = Number(requestedSprint) || baseSprint;
+
+  let targetYear = baseYear;
+  let targetQuarter = baseQuarter;
+
+  if (targetSprint < baseSprint) {
+    targetQuarter += 1;
+    if (targetQuarter > 4) {
+      targetQuarter = 1;
+      targetYear += 1;
+    }
+  }
+
+  return {
+    year: targetYear,
+    quarter: targetQuarter,
+    sprint: targetSprint
+  };
+}
+
+function buildIterationPath(baseIterationPath, sprintContext) {
+  // Si hay baseIterationPath válido del nodo seleccionado, úsalo directamente
+  // El path ya viene en formato correcto: "Gerencia_Tecnologia\2026 [11 días hábiles]\Sprint 5 Q2 2026"
+  const raw = String(baseIterationPath || '').trim();
+  if (raw) {
+    return raw;
+  }
+  
+  // Solo si no hay baseIterationPath, devuelve vacío (será opcional)
+  return '';
+}
+
+function toHtmlParagraphs(text) {
+  const cleaned = String(text || '').trim();
+  if (!cleaned) return '';
+  return cleaned
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => `<p>${line}</p>`)
+    .join('');
+}
+
 function buildAuthHeaders() {
   const token = process.env.AZURE_PERSONAL_ACCESS_TOKEN;
   const encoded = Buffer.from(`:${token}`).toString('base64');
@@ -100,6 +156,34 @@ async function azdoRequest(relativePath, options = {}) {
   }
 
   return response.json();
+}
+
+async function createWorkItem(typeName, operations) {
+  const projectName = encodeURIComponent(String(process.env.AZURE_PROJECT_NAME || '').trim());
+  const workItemType = String(typeName || 'Task').trim() || 'Task';
+  const relativePath = `/${projectName}/_apis/wit/workitems/$${encodeURIComponent(workItemType)}?api-version=7.1`;
+
+  return azdoRequest(relativePath, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json-patch+json'
+    },
+    body: JSON.stringify(operations)
+  });
+}
+
+// Intenta crear con Task, si falla con VS403074, reintenta con Tarea
+async function createWorkItemWithFallback(primaryType, fallbackType, operations) {
+  try {
+    return await createWorkItem(primaryType, operations);
+  } catch (error) {
+    const errorMsg = String(error.message || '');
+    if (errorMsg.includes('VS403074')) {
+      console.log(`${primaryType} está bloqueado, intentando con ${fallbackType}...`);
+      return await createWorkItem(fallbackType, operations);
+    }
+    throw error;
+  }
 }
 
 async function fetchWorkItemsBatch(ids) {
@@ -302,6 +386,146 @@ app.get('/api/hierarchy', async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ error: error.message || 'Error interno' });
+  }
+});
+
+app.post('/api/workitems/create-task', async (req, res) => {
+  try {
+    const missing = getMissingEnv();
+    if (missing.length) {
+      return res.status(500).json({
+        error: `Faltan variables de entorno: ${missing.join(', ')}`
+      });
+    }
+
+    const parentId = Number(req.body?.parentId);
+    const title = String(req.body?.title || '').trim();
+    const assignedTo = String(req.body?.assignedTo || '').trim();
+    const description = String(req.body?.description || '').trim();
+    const acceptance = String(req.body?.acceptanceCriteria || '').trim();
+    const quarterTag = normalizeTag(req.body?.quarterTag);
+    const cellTag = normalizeTag(req.body?.cellTag);
+    const effort = Number(req.body?.effort);
+    const createSubtask = Boolean(req.body?.createSubtask);
+    const subtaskInitialEstimate = Number(req.body?.subtaskInitialEstimate);
+
+    const baseIterationPath = String(req.body?.selectedContext?.iterationPath || '').trim();
+    const baseAreaPath = String(req.body?.selectedContext?.areaPath || '').trim();
+    const baseYear = Number(req.body?.selectedContext?.year);
+    const baseQuarter = Number(req.body?.selectedContext?.quarter);
+    const baseSprint = Number(req.body?.selectedContext?.sprint);
+    const requestedSprint = parseSprintNumber(req.body?.sprint);
+
+    if (!Number.isInteger(parentId) || parentId <= 0) {
+      return res.status(400).json({ error: 'parentId es requerido.' });
+    }
+
+    if (!title) {
+      return res.status(400).json({ error: 'El titulo es requerido.' });
+    }
+
+    const sprintContext = computeSprintContext(
+      {
+        year: baseYear,
+        quarter: baseQuarter,
+        sprint: baseSprint
+      },
+      requestedSprint
+    );
+
+    const computedIterationPath = buildIterationPath(baseIterationPath, sprintContext);
+    const tags = [quarterTag, cellTag].filter(Boolean).join('; ');
+
+    const taskOps = [
+      { op: 'add', path: '/fields/System.Title', value: title },
+      {
+        op: 'add',
+        path: '/relations/-',
+        value: {
+          rel: 'System.LinkTypes.Hierarchy-Reverse',
+          url: `${String(process.env.AZURE_ORGANIZATION_URL || '').replace(/\/$/, '')}/_apis/wit/workItems/${parentId}`,
+          attributes: {
+            comment: 'Creada desde Azure Boards Web'
+          }
+        }
+      },
+      // Campo personalizado: Tipo de tarea = Tarea
+      { op: 'add', path: '/fields/custom.Tipodetarea', value: 'Tarea' }
+    ];
+
+    // Agregar AreaPath del padre si está disponible
+    if (baseAreaPath) {
+      taskOps.push({ op: 'add', path: '/fields/System.AreaPath', value: baseAreaPath });
+    }
+
+    if (description) {
+      const htmlDescription = toHtmlParagraphs(description);
+      if (htmlDescription) {
+        taskOps.push({ op: 'add', path: '/fields/System.Description', value: htmlDescription });
+      }
+    }
+    if (acceptance) {
+      const htmlAcceptance = toHtmlParagraphs(acceptance);
+      if (htmlAcceptance) {
+        taskOps.push({ op: 'add', path: '/fields/Microsoft.VSTS.Common.AcceptanceCriteria', value: htmlAcceptance });
+      }
+    }
+
+    if (assignedTo) taskOps.push({ op: 'add', path: '/fields/System.AssignedTo', value: assignedTo });
+    // Solo agregar IterationPath si tiene estructura completa (contiene "Sprint")
+    if (computedIterationPath && computedIterationPath.includes('Sprint')) {
+      taskOps.push({ op: 'add', path: '/fields/System.IterationPath', value: computedIterationPath });
+    }
+    if (tags) taskOps.push({ op: 'add', path: '/fields/System.Tags', value: tags });
+    if (!Number.isNaN(effort) && effort > 0) taskOps.push({ op: 'add', path: '/fields/Custom.PuntosdeEsfuerzo', value: effort });
+
+    // Intenta Tarea primero (tipo obligatorio en tu Azure DevOps)
+    const createdTask = await createWorkItemWithFallback('Tarea', 'Task', taskOps);
+    const responsePayload = {
+      taskId: createdTask.id
+    };
+
+    if (createSubtask) {
+      const resolvedSubtaskEstimate = !Number.isNaN(subtaskInitialEstimate) && subtaskInitialEstimate > 0
+        ? subtaskInitialEstimate
+        : 3;
+
+      const subtaskOps = [
+        { op: 'add', path: '/fields/System.Title', value: title },
+        {
+          op: 'add',
+          path: '/relations/-',
+          value: {
+            rel: 'System.LinkTypes.Hierarchy-Reverse',
+            url: `${String(process.env.AZURE_ORGANIZATION_URL || '').replace(/\/$/, '')}/_apis/wit/workItems/${createdTask.id}`,
+            attributes: {
+              comment: 'Creada desde Azure Boards Web'
+            }
+          }
+        },
+        { op: 'add', path: '/fields/Custom.c12a8be8-c31b-42ad-b201-0b64e1f59cea', value: resolvedSubtaskEstimate },
+        { op: 'add', path: '/fields/Custom.Tipodesubtarea', value: 'Subtarea' }
+      ];
+
+      // Agregar AreaPath del padre si está disponible
+      if (baseAreaPath) {
+        subtaskOps.push({ op: 'add', path: '/fields/System.AreaPath', value: baseAreaPath });
+      }
+
+      if (assignedTo) subtaskOps.push({ op: 'add', path: '/fields/System.AssignedTo', value: assignedTo });
+      if (computedIterationPath && computedIterationPath.includes('Sprint')) {
+        subtaskOps.push({ op: 'add', path: '/fields/System.IterationPath', value: computedIterationPath });
+      }
+      if (tags) subtaskOps.push({ op: 'add', path: '/fields/System.Tags', value: tags });
+
+      // Intenta Subtarea primero
+      const createdSubtask = await createWorkItemWithFallback('Subtarea', 'Subtask', subtaskOps);
+      responsePayload.subtaskId = createdSubtask.id;
+    }
+
+    res.json(responsePayload);
+  } catch (error) {
+    res.status(500).json({ error: error.message || 'Error interno al crear tarea.' });
   }
 });
 

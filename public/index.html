@@ -24,11 +24,21 @@
           <label class="field-group">
             <span>Nombre del backlog</span>
             <input id="backlogName" type="text" placeholder="do-arquit_gobierno-transformacion_y_modernizacion_arquitectura" />
+            <div class="backlog-switch-row">
+              <select id="backlogSelector" class="filter-select">
+                <option value="">Seleccionar backlog...</option>
+              </select>
+              <button id="btnChangeBacklog" type="button" class="btn-secondary">Cambiar backlog</button>
+            </div>
           </label>
 
           <fieldset class="field-group projects-group">
             <legend>Proyectos a visualizar</legend>
             <div id="projectSelector" class="project-selector"></div>
+            <div class="project-add-row">
+              <input id="newProjectId" type="text" placeholder="ID proyecto nuevo" />
+              <button id="btnAddProject" type="button" class="btn-secondary">Adicionar</button>
+            </div>
           </fieldset>
 
           <button type="submit" class="btn-primary">Cargar backlog</button>
@@ -38,6 +48,11 @@
       <main class="bottom-panels">
         <section class="panel details-panel">
           <h2>Detalle del Work Item</h2>
+
+          <div id="detailActionButtons" class="detail-action-buttons is-hidden">
+            <button id="btnCreateSameType" type="button" class="btn-secondary">Crear mismo tipo</button>
+            <button id="btnCreateChild" type="button" class="btn-secondary">Crear por debajo</button>
+          </div>
 
           <div class="detail-search-wrap">
             <label for="filterTextInput" class="detail-label">Filtro por ID o titulo</label>
@@ -121,6 +136,90 @@
         <ul class="children"></ul>
       </li>
     </template>
+
+    <div id="taskModal" class="modal-overlay is-hidden" role="dialog" aria-modal="true" aria-label="Crear tarea">
+      <div class="modal-card">
+        <div class="modal-head">
+          <h3 id="taskModalTitle">Crear tarea</h3>
+          <button id="btnCloseTaskModal" type="button" class="modal-close-btn">x</button>
+        </div>
+
+        <div class="modal-tabs">
+          <button id="tabRawText" type="button" class="modal-tab is-active">Todo el texto</button>
+          <button id="tabFieldByField" type="button" class="modal-tab">Campo a campo</button>
+        </div>
+
+        <div id="panelRawText" class="modal-panel">
+          <label for="rawTaskText" class="detail-label">Texto markdown</label>
+          <textarea id="rawTaskText" class="modal-textarea" placeholder="Pega el texto completo con los detalles..."></textarea>
+          <div id="subtaskEstimateRawWrap" class="subtask-estimate-row is-hidden">
+            <span>Dedicacion subtarea</span>
+            <input id="subtaskEstimateRaw" type="number" min="0" step="0.5" value="3" />
+            <span>horas</span>
+          </div>
+        </div>
+
+        <div id="panelFieldByField" class="modal-panel is-hidden">
+          <div class="field-grid">
+            <label class="field-group-inline">
+              <span>Titulo</span>
+              <input id="fieldTitle" type="text" />
+            </label>
+            <label class="field-group-inline">
+              <span>Asignado</span>
+              <input id="fieldAssigned" type="text" />
+            </label>
+            <label class="field-group-inline">
+              <span>Sprint</span>
+              <input id="fieldSprint" type="text" placeholder="Sprint 3" />
+            </label>
+            <label class="field-group-inline">
+              <span>Trimestre (tag)</span>
+              <input id="fieldQuarterTag" type="text" placeholder="T3-2026" />
+            </label>
+            <label class="field-group-inline">
+              <span>Celula (tag)</span>
+              <input id="fieldCellTag" type="text" placeholder="[ARQ] Integracion" />
+            </label>
+            <label class="field-group-inline">
+              <span>Puntos de esfuerzo</span>
+              <input id="fieldEffort" type="text" />
+            </label>
+          </div>
+          <label class="field-group-inline">
+            <span>Descripcion</span>
+            <textarea id="fieldDescription" class="modal-textarea short"></textarea>
+          </label>
+          <label class="field-group-inline">
+            <span>Criterios de aceptacion</span>
+            <textarea id="fieldAcceptance" class="modal-textarea short"></textarea>
+          </label>
+          <div id="subtaskEstimateFieldWrap" class="subtask-estimate-row is-hidden">
+            <span>Dedicacion subtarea</span>
+            <input id="subtaskEstimateField" type="number" min="0" step="0.5" value="3" />
+            <span>horas</span>
+          </div>
+        </div>
+
+        <div class="modal-actions">
+          <label class="checkbox-row">
+            <input id="chkCreateSubtask" type="checkbox" />
+            <span>Crear subtarea con dedicacion</span>
+          </label>
+          <button id="btnSubmitCreateTask" type="button" class="btn-secondary detail-create-btn create-depth-3">Crear tarea</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="resultModal" class="modal-overlay is-hidden" role="dialog" aria-modal="true" aria-label="Resultado creacion">
+      <div class="modal-card small">
+        <div class="modal-head">
+          <h3>Work items creados</h3>
+          <button id="btnCloseResultModal" type="button" class="modal-close-btn">x</button>
+        </div>
+        <pre id="resultContent" class="result-content"></pre>
+      </div>
+    </div>
 
     <script src="app.js"></script>
   </body>
